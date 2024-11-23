@@ -1,0 +1,475 @@
+import javax.swing.*;
+import java.awt.*;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
+import java.sql.*;
+import java.util.ArrayList;
+import java.util.List;
+
+public class RestaurantBillingApp {
+
+    public static void main(String[] args) {
+        SwingUtilities.invokeLater(() -> new LoginFrame());
+    }
+
+    // JDBC Database connection method
+    public static Connection getConnection() throws SQLException {
+        String url = "jdbc:mysql://localhost:3306/res_db";
+        String user = "root";  
+        String password = "Vick(2005)";  
+        return DriverManager.getConnection(url, user, password);
+    }
+}
+
+//Login Frame
+class LoginFrame extends JFrame {
+    private JTextField usernameField;
+    private JPasswordField passwordField;
+
+    public LoginFrame() {
+        setTitle("Login");
+        setSize(350, 200);
+        setLayout(new GridBagLayout());
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        setLocationRelativeTo(null);
+
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.insets = new Insets(10, 10, 10, 10);
+
+        JLabel titleLabel = new JLabel("Restaurant Login", JLabel.CENTER);
+        titleLabel.setFont(new Font("Arial", Font.BOLD, 20));
+        titleLabel.setForeground(new Color(34, 139, 34));
+
+        gbc.gridx = 0;
+        gbc.gridy = 0;
+        gbc.gridwidth = 2;
+        add(titleLabel, gbc);
+
+        gbc.gridwidth = 1;
+        gbc.gridy++;
+        gbc.gridx = 0;
+        add(new JLabel("Username:"), gbc);
+
+        usernameField = new JTextField("username");
+        usernameField.setPreferredSize(new Dimension(150, 25)); // width, height
+        gbc.gridx = 1;
+        add(usernameField, gbc);
+
+
+        
+        gbc.gridy++;
+        gbc.gridx = 0;
+        add(new JLabel("Password:"), gbc);
+
+        gbc.gridx = 1;
+        passwordField = new JPasswordField("password");
+        add(passwordField, gbc);
+
+        JButton loginButton = new JButton("Login");
+        loginButton.setBackground(new Color(60, 179, 113));
+        loginButton.setForeground(Color.WHITE);
+        gbc.gridy++;
+        gbc.gridx = 0;
+        gbc.gridwidth = 20;
+        add(loginButton, gbc);
+
+        loginButton.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent e) {
+                String username = usernameField.getText();
+                String password = new String(passwordField.getPassword());
+                if (authenticateUser(username, password)) {
+                    dispose();
+                    new BillingFrame();
+                } else {
+                    JOptionPane.showMessageDialog(null, "Invalid credentials");
+                }
+            }
+        });
+
+        setVisible(true);
+    }
+
+    private boolean authenticateUser(String username, String password) {
+        try (Connection conn = RestaurantBillingApp.getConnection()) {
+            String query = "SELECT * FROM users WHERE username = ? AND password = ?";
+            PreparedStatement stmt = conn.prepareStatement(query);
+            stmt.setString(1, username);
+            stmt.setString(2, password);
+            ResultSet rs = stmt.executeQuery();
+            return rs.next();
+        } catch (SQLException e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+}
+
+// Billing Frame
+// Billing Frame with enhanced bill format and search functionality
+class BillingFrame extends JFrame {
+    private JTextArea billArea;
+    private List<MenuItem> menuItems;
+    private double totalAmount = 0;
+    private JLabel totalLabel;
+    private JTextField customerNameField;
+    private JTextField customerMobileField;
+    private JTextField searchField;
+    private JPanel itemPanel;
+    private int serialNumber = 1;
+    private List<MenuItem> billItems;
+
+    public BillingFrame() {
+        setTitle("Billing System");
+        setSize(700, 600);
+        setLayout(new BorderLayout());
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        setLocationRelativeTo(null);
+
+        billItems = new ArrayList<>();
+        menuItems = fetchMenuItems();
+
+        // Top panel for customer details
+        JPanel customerPanel = new JPanel(new GridLayout(2, 2, 10, 10));
+        customerPanel.setBorder(BorderFactory.createTitledBorder("Customer Details"));
+
+        customerPanel.add(new JLabel("Customer Name:"));
+        customerNameField = new JTextField();
+        customerPanel.add(customerNameField);
+
+        customerPanel.add(new JLabel("Mobile Number:"));
+        customerMobileField = new JTextField();
+        customerPanel.add(customerMobileField);
+
+        add(customerPanel, BorderLayout.NORTH);
+
+        // Left panel for search and menu items
+        // Left panel for search and menu items
+JPanel leftPanel = new JPanel();
+leftPanel.setLayout(new BorderLayout());  // Use BorderLayout for better arrangement
+
+// Search bar
+searchField = new JTextField("Search items...");
+searchField.setToolTipText("Search menu items...");
+leftPanel.add(searchField, BorderLayout.NORTH);
+
+// Menu item panel (list of menu items)
+itemPanel = new JPanel();
+itemPanel.setLayout(new GridLayout(0, 1, 5, 5));  // Display items vertically
+itemPanel.setBackground(new Color(240, 248, 255)); // Light background for the items
+updateMenuItemsList(menuItems); // Call to update the list of menu items
+
+JScrollPane itemScrollPane = new JScrollPane(itemPanel); // Wrap the item panel in a scroll pane
+leftPanel.add(itemScrollPane, BorderLayout.CENTER);
+
+// Adding the left panel to the main layout (East panel remains as before)
+add(leftPanel, BorderLayout.WEST);
+
+// Right panel (East) for the action buttons: Add, Update, Remove items
+JPanel eastPanel = new JPanel();
+eastPanel.setLayout(new BoxLayout(eastPanel, BoxLayout.Y_AXIS)); // Stack buttons vertically
+eastPanel.setPreferredSize(new Dimension(200, getHeight())); // Set width of the east panel to 200px
+
+// Add Item Button
+JButton addItemButton = new JButton("Add Item");
+addItemButton.setBackground(new Color(70, 130, 180));
+addItemButton.setForeground(Color.WHITE);
+addItemButton.addActionListener(e -> showAddItemDialog());
+eastPanel.add(addItemButton);
+
+// Update Item Button
+JButton updateItemButton = new JButton("Update Item Price");
+updateItemButton.setBackground(new Color(30, 144, 255)); // Dodger Blue
+updateItemButton.setForeground(Color.WHITE);
+updateItemButton.addActionListener(e -> showUpdateItemDialog());
+eastPanel.add(updateItemButton);
+
+// Remove Item Button
+JButton removeItemButton = new JButton("Remove Item");
+removeItemButton.setBackground(new Color(255, 69, 0)); // Orange-Red
+removeItemButton.setForeground(Color.WHITE);
+removeItemButton.addActionListener(e -> showRemoveItemDialog());
+eastPanel.add(removeItemButton);
+
+JButton refreshButton = new JButton("Refresh");
+refreshButton.setBackground(new Color(34, 139, 34)); // Forest Green
+refreshButton.setForeground(Color.WHITE);
+refreshButton.addActionListener(e -> refreshPage());
+eastPanel.add(refreshButton);
+
+// Adding the East panel to the layout
+add(eastPanel, BorderLayout.EAST);
+
+// Center panel for the bill area and total amount
+JPanel billPanel = new JPanel(new BorderLayout());
+billArea = new JTextArea();
+billArea.setEditable(false);
+JScrollPane billScrollPane = new JScrollPane(billArea);
+
+totalLabel = new JLabel("Total: ₹0.00");
+totalLabel.setFont(new Font("Arial", Font.BOLD, 16));
+totalLabel.setHorizontalAlignment(JLabel.CENTER);
+
+JButton printButton = new JButton("Print Bill");
+printButton.addActionListener(e -> printBill());
+
+billPanel.add(billScrollPane, BorderLayout.CENTER);
+billPanel.add(totalLabel, BorderLayout.SOUTH);
+billPanel.add(printButton, BorderLayout.NORTH);
+
+add(billPanel, BorderLayout.CENTER);
+
+
+        setVisible(true);
+    }
+
+    // Method to fetch menu items from the database
+    private List<MenuItem> fetchMenuItems() {
+        List<MenuItem> items = new ArrayList<>();
+        try (Connection conn = RestaurantBillingApp.getConnection();
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery("SELECT * FROM menu_items")) {
+
+            while (rs.next()) {
+                items.add(new MenuItem(rs.getString("name"), rs.getDouble("price")));
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return items;
+    }
+        // Method to show a dialog for adding a new item
+        private void showAddItemDialog() {
+            JTextField itemNameField = new JTextField(20);
+            JTextField itemPriceField = new JTextField(10);
+    
+            JPanel panel = new JPanel(new GridLayout(2, 2, 10, 10));
+            panel.add(new JLabel("Item Name:"));
+            panel.add(itemNameField);
+            panel.add(new JLabel("Item Price:"));
+            panel.add(itemPriceField);
+    
+            int result = JOptionPane.showConfirmDialog(this, panel, "Add New Item",
+                    JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
+    
+            if (result == JOptionPane.OK_OPTION) {
+                String itemName = itemNameField.getText().trim();
+                String itemPriceText = itemPriceField.getText().trim();
+    
+                if (itemName.isEmpty() || itemPriceText.isEmpty()) {
+                    JOptionPane.showMessageDialog(this, "Please enter both item name and price.");
+                    return;
+                }
+    
+                try {
+                    double itemPrice = Double.parseDouble(itemPriceText);
+                    addItemToDatabase(itemName, itemPrice);
+                    refreshMenuItems();
+                    JOptionPane.showMessageDialog(this, "Item added successfully!");
+                } catch (NumberFormatException e) {
+                    JOptionPane.showMessageDialog(this, "Invalid price format. Please enter a valid number.");
+                }
+            }
+        }
+            // Method to insert a new item into the menu_items table
+    private void addItemToDatabase(String name, double price) {
+        String query = "INSERT INTO menu_items (name, price) VALUES (?, ?)";
+        try (Connection conn = RestaurantBillingApp.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(query)) {
+            stmt.setString(1, name);
+            stmt.setDouble(2, price);
+            stmt.executeUpdate();
+        } catch (SQLException e) {
+            e.printStackTrace();
+            JOptionPane.showMessageDialog(this, "Failed to add item to the database.");
+        }
+    }
+    // // Method to update the menu list panel
+    private void updateMenuItemsList(List<MenuItem> items) {
+        itemPanel.removeAll();
+        for (MenuItem item : items) {
+            JButton itemButton = new JButton(item.getName() + " - ₹" + item.getPrice());
+            itemButton.setBackground(new Color(72, 209, 204));
+            itemButton.setForeground(Color.WHITE);
+            itemButton.addActionListener(e -> addItemToBill(item));
+            itemPanel.add(itemButton);
+        }
+        itemPanel.revalidate();
+        itemPanel.repaint();
+    }
+
+    // Method to search and update menu items
+    private void searchAndUpdateMenuList() {
+        String searchText = searchField.getText().toLowerCase();
+        List<MenuItem> filteredItems = new ArrayList<>();
+        for (MenuItem item : menuItems) {
+            if (item.getName().toLowerCase().contains(searchText)) {
+                filteredItems.add(item);
+            }
+        }
+        updateMenuItemsList(filteredItems);
+    }
+    //Remove item
+    private void showRemoveItemDialog() {
+        String[] itemNames = menuItems.stream()
+                                      .map(MenuItem::getName)
+                                      .toArray(String[]::new);
+    
+        String selectedItem = (String) JOptionPane.showInputDialog(
+            this,
+            "Select Item to Remove:",
+            "Remove Item",
+            JOptionPane.PLAIN_MESSAGE,
+            null,
+            itemNames,
+            itemNames[0]
+        );
+    
+        if (selectedItem != null) {
+            removeItemFromDatabase(selectedItem);
+            refreshMenuItems();
+            JOptionPane.showMessageDialog(this, "Item removed successfully!");
+        }
+    }
+    
+    private void removeItemFromDatabase(String name) {
+        String query = "DELETE FROM menu_items WHERE name = ?";
+        try (Connection conn = RestaurantBillingApp.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(query)) {
+            stmt.setString(1, name);
+            stmt.executeUpdate();
+        } catch (SQLException e) {
+            e.printStackTrace();
+            JOptionPane.showMessageDialog(this, "Failed to remove item from the database.");
+        }
+    }
+    //Update item
+
+    private void showUpdateItemDialog() {
+        String[] itemNames = menuItems.stream()
+                                      .map(MenuItem::getName)
+                                      .toArray(String[]::new);
+    
+        JPanel panel = new JPanel(new GridLayout(2, 2, 10, 10));
+        JComboBox<String> itemComboBox = new JComboBox<>(itemNames);
+        JTextField newPriceField = new JTextField();
+    
+        panel.add(new JLabel("Select Item:"));
+        panel.add(itemComboBox);
+        panel.add(new JLabel("New Price:"));
+        panel.add(newPriceField);
+    
+        int result = JOptionPane.showConfirmDialog(
+            this,
+            panel,
+            "Update Item Price",
+            JOptionPane.OK_CANCEL_OPTION,
+            JOptionPane.PLAIN_MESSAGE
+        );
+    
+        if (result == JOptionPane.OK_OPTION) {
+            String selectedItem = (String) itemComboBox.getSelectedItem();
+            String newPriceText = newPriceField.getText().trim();
+    
+            try {
+                double newPrice = Double.parseDouble(newPriceText);
+                updateItemPriceInDatabase(selectedItem, newPrice);
+                refreshMenuItems();
+                JOptionPane.showMessageDialog(this, "Price updated successfully!");
+            } catch (NumberFormatException e) {
+                JOptionPane.showMessageDialog(this, "Invalid price format. Please enter a valid number.");
+            }
+        }
+    }
+    
+    private void updateItemPriceInDatabase(String name, double newPrice) {
+        String query = "UPDATE menu_items SET price = ? WHERE name = ?";
+        try (Connection conn = RestaurantBillingApp.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(query)) {
+            stmt.setDouble(1, newPrice);
+            stmt.setString(2, name);
+            stmt.executeUpdate();
+        } catch (SQLException e) {
+            e.printStackTrace();
+            JOptionPane.showMessageDialog(this, "Failed to update item price in the database.");
+        }
+    }
+    
+    
+
+    // Method to add item to bill with serial number
+    private void addItemToBill(MenuItem item) {
+        billItems.add(item);
+        billArea.append(serialNumber + ". " + item.getName() + "\t₹" + item.getPrice() + "\n");
+        totalAmount += item.getPrice();
+        totalLabel.setText("Total: ₹" + String.format("%.2f", totalAmount));
+        serialNumber++;
+    }
+
+    // Method to print bill with formatted details
+    private void printBill() {
+        if (customerNameField.getText().isEmpty() || customerMobileField.getText().isEmpty()) {
+            JOptionPane.showMessageDialog(this, "Please enter customer details");
+            return;
+        }
+
+        try (Connection conn = RestaurantBillingApp.getConnection()) {
+            String query = "INSERT INTO customers (name, mobile) VALUES (?, ?)";
+            PreparedStatement stmt = conn.prepareStatement(query);
+            stmt.setString(1, customerNameField.getText());
+            stmt.setString(2, customerMobileField.getText());
+            stmt.executeUpdate();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+
+        // Printing formatted bill
+        StringBuilder billContent = new StringBuilder();
+        billContent.append("******** ESTIMATE ********\n");
+        billContent.append("Restaurant XYZ\n");
+        billContent.append("Customer Name: ").append(customerNameField.getText()).append("\n");
+        billContent.append("Mobile Number: ").append(customerMobileField.getText()).append("\n\n");
+        billContent.append("Items:\n");
+        billContent.append("No.\tItem\tPrice\n");
+
+        int serialNo = 1;
+        for (MenuItem item : billItems) {
+            billContent.append(serialNo++).append(".\t").append(item.getName())
+                        .append("\t₹").append(item.getPrice()).append("\n");
+        }
+
+        billContent.append("\nTotal: ₹").append(String.format("%.2f", totalAmount)).append("\n");
+        billArea.setText(billContent.toString());
+
+        try {
+            billArea.print();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    // Refresh menu items from the database
+    public void refreshMenuItems() {
+        menuItems = fetchMenuItems();
+        updateMenuItemsList(menuItems);
+        
+    }
+}
+
+// MenuItem class
+class MenuItem {
+    private String name;
+    private double price;
+
+    public MenuItem(String name, double price) {
+        this.name = name;
+        this.price = price;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public double getPrice() {
+        return price;
+    }
+}
